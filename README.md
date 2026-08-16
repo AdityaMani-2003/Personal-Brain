@@ -2,6 +2,9 @@
 
 **Personal Brain** is a conversational productivity agent built with Express, React (Vite), Node.js, **GBrain** (https://github.com/garrytan/gbrain) as the persistent knowledge store, and **Gemini API (Function Calling)**. It allows users to ask natural-language questions across synchronized Gmail and Google Calendar data with grounded, cross-source reasoning.
 
+- 🌐 **Live Deployed App**: [https://personal-brain-c5bn.onrender.com/](https://personal-brain-c5bn.onrender.com/)
+- 💻 **GitHub Repository**: [https://github.com/AdityaMani-2003/Personal-Brain](https://github.com/AdityaMani-2003/Personal-Brain)
+
 For full project requirements, query specifications, exact field schemas, and architectural details, please refer to [SPEC.md](SPEC.md).
 
 ---
