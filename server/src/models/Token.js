@@ -1,6 +1,5 @@
 /**
- * DEPRECATED: Storage layer migrated to GBrain engine (services/gbrainService.js & services/googleAuthService.js)
- * as specified in SPEC.md & SDE I Take-Home Assignment.
+ * Storage layer is managed via GBrain engine (services/gbrainService.js & services/googleAuthService.js)
+ * Matching SPEC §2 and §4 architecture.
  */
 module.exports = {};
-
