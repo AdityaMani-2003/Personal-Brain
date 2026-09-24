@@ -1,0 +1,744 @@
+CLAUDE OPUS — IMPLEMENTATION-PLANNING MASTER PROMPT
+Project: Personal Brain
+Repository: https://github.com/AdityaMani-2003/Personal-Brain
+
+ROLE
+You are the senior product architect, staff full-stack engineer, UX/UI designer, QA engineer, and implementation planner for this repository.
+
+Your job is NOT to implement the code yourself. Your job is to deeply inspect the repository and produce ONE complete, execution-ready implementation prompt for Antigravity so that Antigravity can take the existing Personal Brain codebase from its current state to a polished, production-ready SaaS-style application, implementing everything that is genuinely missing.
+
+The final output from you must be a SINGLE COPY-PASTEABLE PROMPT for Antigravity.
+
+IMPORTANT:
+- Do not invent features that conflict with the repository's specification.
+- Do not blindly rewrite working functionality.
+- Preserve working backend/business logic unless there is a concrete reason to change it.
+- Inspect the repository end-to-end before deciding what is missing.
+- Treat SPEC.md as the source of truth for functional requirements.
+- Treat the existing code as the source of truth for what is already implemented.
+- Your prompt must tell Antigravity exactly what to inspect, what to change, what to preserve, how to implement, how to verify, and what "done" means.
+- The final application must feel like a real, polished SaaS product rather than a college project/demo.
+- Prioritize usability, visual hierarchy, responsiveness, reliability, accessibility, loading/error/empty states, and production polish.
+
+REPOSITORY CONTEXT
+The current repository is a React/Vite frontend + Express/Node backend application using GBrain as a persistent knowledge store and Gemini API function calling. It synchronizes Google Gmail and Google Calendar data and supports grounded natural-language queries across those sources.
+
+The repository currently documents:
+- Tier 1 calendar agenda queries
+- Tier 1 Gmail search/unread queries
+- Tier 2 Gmail + Calendar cross-source correlation
+- strict grounding / explicit no-match behavior
+- a Linear-inspired high-density dashboard
+- live connector controls
+- store statistics
+- quick starter queries
+- GBrain storage inspection
+- streaming tool execution indicators
+
+Known structure:
+/
+├── SPEC.md
+├── README.md
+├── render.yaml
+├── server/
+│   ├── src/
+│   │   ├── services/
+│   │   ├── routes/
+│   │   ├── app.js
+│   │   └── server.js
+│   └── package.json
+└── client/
+    ├── src/
+    │   ├── components/
+    │   ├── App.jsx
+    │   └── index.css
+    └── package.json
+
+KNOWN CURRENT STACK
+- Frontend: React + Vite
+- Backend: Node.js + Express
+- Persistent knowledge store: GBrain
+- AI: Gemini API / function calling
+- Integrations: Google Gmail + Google Calendar
+- Deployment configuration: Render
+- Frontend deployment can use Vercel or Express-served static assets
+
+CORE PRODUCT INTENT
+Personal Brain should feel like a trustworthy personal intelligence workspace:
+- connect Google services
+- ingest/synchronize data
+- ask questions in natural language
+- get grounded answers
+- understand where answers came from
+- inspect synchronized memory/store data
+- understand connector health and sync state
+- navigate the product without friction
+
+DO NOT TURN IT INTO:
+- an email client
+- a calendar editor
+- a generic chatbot
+- a fake AI dashboard full of decorative charts
+- a generic CRM
+- a multi-tenant enterprise SaaS unless the existing architecture explicitly supports it
+
+The documented non-goal is read-only viewing/querying; do not add email drafting/sending or event creation unless the repository's actual implementation/spec has already changed and clearly requires it.
+
+==================================================
+PHASE 1 — REPOSITORY FORENSICS
+==================================================
+
+Before producing the Antigravity prompt, inspect EVERYTHING relevant in the repository.
+
+Read end-to-end:
+1. README.md
+2. SPEC.md
+3. package.json files
+4. render.yaml
+5. all frontend source files
+6. all backend source files
+7. all service modules
+8. all route modules
+9. all UI components
+10. CSS/design system
+11. environment examples
+12. tests, if any
+13. authentication implementation
+14. Gmail integration
+15. Calendar integration
+16. GBrain integration
+17. Gemini/function-calling implementation
+18. error handling
+19. loading/streaming behavior
+20. deployment configuration
+
+Do not stop after reading README/SPEC.
+
+Build an internal inventory with:
+- implemented features
+- partially implemented features
+- broken features
+- dead code
+- duplicate code
+- fragile code
+- missing states
+- UI inconsistencies
+- security risks
+- accessibility problems
+- mobile/responsive issues
+- API reliability issues
+- deployment issues
+- missing tests
+- missing observability
+- missing documentation
+- performance bottlenecks
+
+For every proposed change, classify it:
+A. MUST FIX — broken, unsafe, misleading, or required for production readiness
+B. MUST ADD — clearly required for a polished usable product
+C. SHOULD IMPROVE — meaningful quality improvement
+D. OPTIONAL — only if low-risk and useful
+
+Do NOT add features merely because they are trendy.
+
+==================================================
+PHASE 2 — PRODUCT EXPERIENCE AUDIT
+==================================================
+
+Audit the current UX as if you were reviewing a real SaaS product.
+
+The UI should evolve from a utilitarian Linear-inspired dashboard into a premium personal intelligence workspace.
+
+Design principles:
+- calm
+- intelligent
+- minimal
+- premium
+- information-dense without feeling cluttered
+- fast
+- trustworthy
+- obvious hierarchy
+- keyboard-friendly
+- accessible
+- responsive
+- consistent
+
+Do not use excessive gradients, glassmorphism, glowing neon effects, giant hero sections, unnecessary animations, fake metrics, or visual noise.
+
+Establish a coherent design system:
+- typography
+- spacing scale
+- colors
+- surfaces
+- borders
+- radii
+- shadows
+- iconography
+- buttons
+- inputs
+- cards
+- badges
+- tabs
+- tooltips
+- dialogs
+- drawers
+- command/search UI
+- toast/notification system
+- skeleton loaders
+- empty states
+- error states
+
+Preserve Plus Jakarta Sans + JetBrains Mono if they remain appropriate, but inspect actual usage first.
+
+==================================================
+PHASE 3 — INFORMATION ARCHITECTURE
+==================================================
+
+Determine the cleanest information architecture for the existing functionality.
+
+At minimum evaluate these product areas:
+
+1. Overview / Home
+2. Ask / AI Workspace
+3. Sources / Connections
+4. Memory / GBrain Store
+5. Activity / Sync history
+6. Settings / configuration
+
+Do not create unnecessary pages if the existing app can accomplish the same thing better with panels/drawers.
+
+The main navigation must make the product understandable within seconds.
+
+Define:
+- primary navigation
+- secondary navigation
+- active states
+- breadcrumbs where useful
+- page titles
+- contextual actions
+- global search / command palette if justified
+- mobile navigation
+
+==================================================
+PHASE 4 — DASHBOARD / HOME
+==================================================
+
+Design a real SaaS-quality home experience.
+
+It should communicate:
+- whether Google connections are healthy
+- when data was last synchronized
+- how much information is available
+- what the user can ask
+- recent activity
+- useful starter questions
+- system health
+
+Avoid meaningless vanity metrics.
+
+Possible useful cards/sections, ONLY when backed by actual data:
+- Gmail items indexed
+- Calendar events indexed
+- last sync time
+- connector health
+- recent queries
+- recent sync activity
+- store/entity count
+- answer confidence/grounding indicators
+- quick actions
+
+Every metric must come from actual backend data.
+
+Never fabricate data.
+
+==================================================
+PHASE 5 — AI / CHAT EXPERIENCE
+==================================================
+
+This is the core product.
+
+Make the question-answer experience feel like a serious AI research/workspace product.
+
+Requirements:
+- excellent input composer
+- clear placeholder examples
+- starter prompts
+- streaming responses where supported
+- tool execution visibility
+- readable answer formatting
+- source grounding
+- source citations / evidence references when data supports them
+- clear distinction between answer and retrieved evidence
+- expandable source details
+- graceful no-result state
+- graceful partial-result state
+- retry behavior
+- copy response
+- useful follow-up interactions if compatible
+- keyboard shortcuts
+- loading state
+- cancellation if technically safe
+- error recovery
+
+Do not make the AI appear more certain than the data supports.
+
+The UI should reinforce the existing strict-grounding behavior.
+
+When the system cannot find matching information:
+- clearly state that no matching information was found
+- avoid fabricated explanations
+- optionally show what sources were searched
+- give the user a useful next action
+
+If tool execution is exposed, make it understandable without leaking implementation details unnecessarily.
+
+==================================================
+PHASE 6 — CONNECTORS
+==================================================
+
+Create a premium connector management experience around Gmail and Google Calendar.
+
+Each connector should expose real state:
+- connected/disconnected
+- authorization state
+- sync state
+- last successful sync
+- last attempted sync
+- error state
+- indexed item counts if available
+- reconnect action
+- sync/retry action where supported
+
+Do not display fake "connected" states.
+
+Make OAuth/error flows understandable to normal users.
+
+If tokens/sensitive credentials are handled server-side, ensure the frontend never exposes secrets.
+
+==================================================
+PHASE 7 — MEMORY / GBRAIN STORAGE MANAGER
+==================================================
+
+The storage manager should feel like a professional developer/product tool rather than raw JSON dumped onto a page.
+
+Improve:
+- search
+- filtering
+- pagination/virtualization where necessary
+- entity detail view
+- structured JSON inspection
+- readable metadata
+- source attribution
+- timestamps
+- entity type
+- relationships
+- raw/structured toggle where useful
+
+Preserve the ability to inspect raw entity JSON because it is useful for trust/debugging.
+
+Do not expose unnecessary internal implementation details to normal users by default.
+
+==================================================
+PHASE 8 — SYNC / ACTIVITY EXPERIENCE
+==================================================
+
+If backend data permits, build a clean activity timeline:
+- sync started
+- sync completed
+- sync failed
+- authentication changed
+- ingestion events
+- AI query/tool activity where useful
+
+Every activity item should show:
+- time
+- source
+- status
+- concise description
+- details/error when relevant
+
+Avoid fake activity records.
+
+==================================================
+PHASE 9 — RESPONSIVE + ACCESSIBILITY
+==================================================
+
+The application must work properly at:
+- desktop
+- laptop
+- tablet
+- mobile
+
+Audit:
+- sidebar collapse
+- navigation
+- chat composer
+- tables/lists
+- drawers
+- dialogs
+- cards
+- overflow
+- typography
+- touch targets
+- keyboard navigation
+- focus states
+- screen reader semantics
+- contrast
+- reduced motion
+
+No horizontal overflow on normal mobile widths.
+
+==================================================
+PHASE 10 — FRONTEND ENGINEERING QUALITY
+==================================================
+
+Inspect whether the current React architecture is maintainable.
+
+Improve where justified:
+- component boundaries
+- state management
+- API abstraction
+- loading states
+- error handling
+- reusable UI primitives
+- constants
+- utility functions
+- hooks
+- form handling
+- type safety if compatible with the current project
+- code splitting where useful
+
+Do not rewrite the entire frontend simply for stylistic reasons.
+
+Remove dead/duplicated code where safe.
+
+Use consistent naming.
+
+==================================================
+PHASE 11 — BACKEND ENGINEERING QUALITY
+==================================================
+
+Audit Express backend for:
+- route organization
+- validation
+- authentication
+- authorization boundaries
+- CORS
+- security headers
+- rate limiting where appropriate
+- request size limits
+- error handling
+- logging
+- async error handling
+- timeout handling
+- external API failure handling
+- Gemini failure handling
+- Gmail failure handling
+- Calendar failure handling
+- GBrain failure handling
+- graceful shutdown
+- environment validation
+
+Never leak:
+- API keys
+- OAuth secrets
+- access tokens
+- stack traces
+- sensitive provider errors
+
+to the browser in production.
+
+Use structured, actionable errors.
+
+==================================================
+PHASE 12 — AI / GEMINI RELIABILITY
+==================================================
+
+Audit function-calling and grounding carefully.
+
+The AI must:
+- use only supported tools
+- avoid unsupported claims
+- handle missing data
+- handle malformed tool responses
+- handle provider errors
+- handle timeouts
+- preserve source attribution
+- produce deterministic behavior where possible
+
+If prompts/system instructions are weak, rewrite them.
+
+Do not introduce generic "you are a helpful assistant" prompts where precise tool/grounding instructions are needed.
+
+Document:
+- tool contracts
+- expected arguments
+- return shapes
+- failure modes
+
+==================================================
+PHASE 13 — SECURITY
+==================================================
+
+Treat this as a real application handling personal Gmail and Calendar data.
+
+Audit:
+- OAuth flow
+- redirect URI handling
+- cookie/session/token handling
+- CSRF implications
+- CORS
+- XSS
+- injection
+- prototype pollution
+- unsafe JSON rendering
+- URL handling
+- SSRF risks
+- secrets
+- logs
+- error responses
+- local storage usage
+- browser exposure of tokens
+- dependency vulnerabilities
+
+Apply least privilege.
+
+Do not store secrets in frontend code.
+
+Do not log sensitive email/calendar content unnecessarily.
+
+==================================================
+PHASE 14 — PERFORMANCE
+==================================================
+
+Measure before optimizing.
+
+Look for:
+- unnecessary re-renders
+- expensive JSON rendering
+- huge store payloads
+- unbounded lists
+- repeated API requests
+- duplicate sync operations
+- excessive Gemini calls
+- unnecessary GBrain queries
+- oversized bundles
+
+Use pagination, virtualization, caching, debouncing, memoization, or lazy loading only where justified.
+
+==================================================
+PHASE 15 — TESTING
+==================================================
+
+Create an explicit test plan and tell Antigravity to implement the highest-value tests.
+
+At minimum:
+- authentication flow
+- connector state
+- Gmail queries
+- Calendar queries
+- cross-source queries
+- no-result grounding behavior
+- malformed tool response handling
+- API error handling
+- important UI interactions
+- responsive layout smoke tests
+- build/deployment smoke tests
+
+Do not make tests depend on real personal accounts.
+
+Mock external providers.
+
+If an end-to-end environment is available, define safe test fixtures.
+
+==================================================
+PHASE 16 — DEPLOYMENT
+==================================================
+
+Audit Render + frontend deployment.
+
+Verify:
+- production environment variables
+- frontend/backend URLs
+- CORS
+- OAuth redirect URI
+- build commands
+- start commands
+- health endpoint
+- production logging
+- static asset handling
+- SPA routing
+- failure behavior
+
+If the current architecture can be deployed as a single service cleanly, assess it.
+
+If separate frontend/backend deployment is preferable, specify exactly why and what needs changing.
+
+Do not require unnecessary infrastructure.
+
+==================================================
+PHASE 17 — PRODUCT POLISH
+==================================================
+
+Tell Antigravity to add polish only where it improves real usability.
+
+Examples:
+- command palette
+- keyboard shortcuts
+- thoughtful micro-interactions
+- skeleton loaders
+- optimistic UI only when safe
+- toasts
+- confirmation dialogs for destructive operations
+- empty states
+- onboarding guidance
+- contextual tooltips
+- connection status
+- "last synced" freshness indicators
+- clear retry buttons
+
+Animations must be subtle and purposeful.
+
+Respect prefers-reduced-motion.
+
+==================================================
+PHASE 18 — DOCUMENTATION
+==================================================
+
+Update documentation after implementation.
+
+README must clearly explain:
+- what Personal Brain is
+- architecture
+- features
+- setup
+- environment variables
+- Google OAuth setup
+- Gemini setup
+- local development
+- testing
+- deployment
+- security considerations
+- troubleshooting
+- known limitations
+
+If implementation differs from SPEC.md, update SPEC.md so documentation and behavior agree.
+
+==================================================
+PHASE 19 — DEFINITION OF DONE
+==================================================
+
+The Antigravity implementation is complete only when:
+
+1. Existing functionality still works.
+2. All critical broken behavior is fixed.
+3. UI feels like a polished SaaS product.
+4. Desktop and mobile experiences are usable.
+5. Loading, empty, error, and success states exist.
+6. Gmail and Calendar connector states are truthful.
+7. AI answers remain grounded.
+8. No-result behavior remains safe.
+9. Secrets are protected.
+10. Production error handling is robust.
+11. Important flows are tested.
+12. Production build succeeds.
+13. Deployment configuration is valid.
+14. Documentation matches reality.
+15. No fake metrics/data have been introduced.
+16. No unnecessary rewrites have destabilized working code.
+
+==================================================
+CRITICAL ANTIGRAVITY EXECUTION RULES
+==================================================
+
+Your final prompt MUST instruct Antigravity to work in this order:
+
+STEP 1 — Inspect
+Read the repository completely.
+
+STEP 2 — Baseline
+Run the existing application and tests where possible.
+
+STEP 3 — Audit
+Create a concrete implementation checklist based on actual findings.
+
+STEP 4 — Architecture
+Decide the minimum necessary architectural changes.
+
+STEP 5 — Implement
+Implement the changes incrementally.
+
+STEP 6 — Verify
+Run tests, lint/build, and functional checks.
+
+STEP 7 — UX QA
+Inspect all important screens at desktop and mobile sizes.
+
+STEP 8 — Security QA
+Audit secrets, OAuth, CORS, XSS, injection, and error leakage.
+
+STEP 9 — Deployment QA
+Verify production configuration.
+
+STEP 10 — Documentation
+Update README/SPEC and any necessary developer documentation.
+
+STEP 11 — Final audit
+Compare implementation against the original repository requirements and the implementation checklist.
+
+Do not stop after making visual changes.
+
+Do not say "looks good" without testing.
+
+Do not leave TODOs for core functionality.
+
+If a feature cannot be safely implemented because required information is missing, document the blocker and implement the best safe fallback rather than inventing behavior.
+
+==================================================
+OUTPUT FORMAT REQUIRED FROM YOU
+==================================================
+
+Return ONE complete Antigravity prompt only.
+
+The prompt must contain these sections:
+
+1. ROLE
+2. PROJECT CONTEXT
+3. NON-NEGOTIABLE RULES
+4. REPOSITORY INSPECTION PLAN
+5. CURRENT ARCHITECTURE TO PRESERVE/REVIEW
+6. PRODUCT UX VISION
+7. INFORMATION ARCHITECTURE
+8. UI/UX IMPLEMENTATION REQUIREMENTS
+9. AI/CHAT REQUIREMENTS
+10. CONNECTOR REQUIREMENTS
+11. MEMORY/GBRAIN REQUIREMENTS
+12. BACKEND REQUIREMENTS
+13. SECURITY REQUIREMENTS
+14. PERFORMANCE REQUIREMENTS
+15. RESPONSIVE/ACCESSIBILITY REQUIREMENTS
+16. TESTING REQUIREMENTS
+17. DEPLOYMENT REQUIREMENTS
+18. DOCUMENTATION REQUIREMENTS
+19. IMPLEMENTATION ORDER
+20. ACCEPTANCE CRITERIA
+21. FINAL VERIFICATION CHECKLIST
+
+For every major requirement, distinguish:
+- MUST
+- SHOULD
+- OPTIONAL
+
+The prompt must be specific enough that Antigravity can execute without asking vague clarification questions.
+
+Do not provide a generic "make the UI better" instruction.
+
+Do not provide a superficial redesign.
+
+Do not invent backend capabilities that do not exist.
+
+The goal is:
+CURRENT REPOSITORY → AUDITED → COMPLETED → POLISHED → TESTED → DEPLOYABLE → REAL SAAS-QUALITY PERSONAL BRAIN.
+
+Final principle:
+BUILD THE PRODUCT THAT THE EXISTING SPECIFICATION AND CODEBASE ARE ALREADY TRYING TO BECOME — THEN FINISH THE MISSING PARTS WITH HIGH-QUALITY PRODUCT, ENGINEERING, UX, SECURITY, AND QA JUDGMENT.

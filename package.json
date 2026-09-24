@@ -1,14 +1,16 @@
 {
   "name": "personal-brain-monorepo",
   "version": "1.0.0",
-  "description": "Personal Brain Conversational Assistant - MERN & GBrain Store",
+  "description": "Personal Brain Conversational Assistant — Express & GBrain Store",
   "main": "server/src/server.js",
   "scripts": {
     "build": "npm run build --prefix client",
     "start": "node server/src/server.js",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "test": "npm test --prefix server",
+    "verify": "npm test --prefix server && npm run build --prefix client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

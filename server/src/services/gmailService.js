@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const { getAuthedClient, getCurrentUser } = require('./googleAuthService');
 const gbrainService = require('./gbrainService');
+const syncStateService = require('./syncStateService');
 
 /**
  * Gmail Service
@@ -58,10 +59,10 @@ function extractBodyText(part) {
       return stripHtml(rawHtml);
     }
 
-    // Recursive search in remaining parts
-    for (const subPart of part.parts) {
-      const result = extractBodyText(subPart);
-      if (result) return result;
+    // Recursively check deeper parts
+    for (const nestedPart of part.parts) {
+      const nestedText = extractBodyText(nestedPart);
+      if (nestedText) return nestedText;
     }
   }
 
@@ -69,26 +70,22 @@ function extractBodyText(part) {
 }
 
 /**
- * Recursively checks if a message payload contains file attachments.
+ * Checks if message payload contains attachments.
  */
-function checkHasAttachments(part) {
-  if (!part) return false;
-  if (part.filename && part.filename.trim().length > 0 && part.mimeType !== 'text/plain' && part.mimeType !== 'text/html') {
-    return true;
-  }
-  if (part.body && part.body.attachmentId) {
-    return true;
-  }
-  if (part.parts && Array.isArray(part.parts)) {
-    return part.parts.some(checkHasAttachments);
+function checkHasAttachments(payload) {
+  if (!payload) return false;
+  if (payload.parts && Array.isArray(payload.parts)) {
+    return payload.parts.some(
+      (part) =>
+        (part.filename && part.filename.length > 0) ||
+        (part.body && part.body.attachmentId)
+    );
   }
   return false;
 }
 
 /**
- * Creates an authorized OAuth2 client instance for Gmail API operations using passed tokens.
- * Legacy helper maintained for compatibility.
- * @param {Object} tokens - User OAuth2 credentials
+ * Creates an authorized OAuth2 client instance for Google Gmail API operations using passed tokens.
  */
 function getGmailClient(tokens) {
   const oAuth2Client = new google.auth.OAuth2(
@@ -102,147 +99,123 @@ function getGmailClient(tokens) {
 
 /**
  * Fetches recent emails using the Gmail API, parses fields matching SPEC.md Section 2,
- * and upserts them into the MongoDB Email collection.
+ * and upserts them into the GBrain store.
  * 
- * @param {number} maxResults - Maximum number of messages to fetch (default: 200)
+ * @param {number} maxResults - Maximum number of messages to fetch (capped at 50)
  * @returns {Promise<number>} Number of synced emails
  */
 async function fetchRecentEmails(maxResults = 50) {
+  syncStateService.recordSyncStart('gmail');
+
   let authClient;
   try {
     authClient = await getAuthedClient();
   } catch (authErr) {
-    console.log('[gmailService] OAuth token missing. Syncing sample Gmail messages into GBrain store...');
-    const sampleEmails = [
-      {
-        threadId: 'thread_stripe_001',
-        messageId: 'msg_stripe_001',
-        from: 'support@stripe.com',
-        to: ['user@personalbrain.local'],
-        subject: 'Important: Failed payment for your subscription',
-        snippet: 'Your recent payment of $49.00 for subscription renewal failed.',
-        bodyText: 'Hello, Your recent payment attempt for $49.00 failed due to insufficient funds or expired payment method.',
-        date: new Date(),
-        hasAttachments: false,
-        labels: ['INBOX', 'IMPORTANT', 'UNREAD']
-      },
-      {
-        threadId: 'thread_alice_002',
-        messageId: 'msg_alice_002',
-        from: 'alice@acme.com',
-        to: ['user@personalbrain.local'],
-        subject: 'Q1 Product Sync Agenda & Questions',
-        snippet: 'Hi, attaching the roadmap questions for tomorrow sync. Can you review before our meeting?',
-        bodyText: 'Hi there,\n\nI wanted to send over the agenda items for our Q1 Product Sync scheduled for tomorrow.\n\nBest,\nAlice',
-        date: new Date(),
-        hasAttachments: true,
-        labels: ['INBOX', 'UNREAD']
-      }
-    ];
+    const err = new Error('Connect your Google account to sync Gmail.');
+    err.code = 'NOT_CONNECTED';
+    err.statusCode = 401;
+    syncStateService.recordSyncError('gmail', err.message);
+    throw err;
+  }
 
-    for (const email of sampleEmails) {
-      await gbrainService.saveEmail(email);
+  try {
+    const currentUser = await getCurrentUser();
+    const userId = currentUser ? currentUser._id : null;
+    const gmail = google.gmail({ version: 'v1', auth: authClient });
+
+    // Honest cap: max 50 emails
+    const effectiveMax = Math.min(Math.max(1, Number(maxResults) || 50), 50);
+
+    // List recent message headers/IDs
+    const listRes = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults: effectiveMax
+    });
+
+    const messagesList = listRes.data.messages || [];
+    if (messagesList.length === 0) {
+      syncStateService.recordSyncSuccess('gmail', 0);
+      return 0;
     }
-    return sampleEmails.length;
-  }
 
-  const currentUser = await getCurrentUser();
-  const userId = currentUser ? currentUser._id : null;
-  const gmail = google.gmail({ version: 'v1', auth: authClient });
+    const emailsToSave = [];
 
-  // List recent message headers/IDs
-  const listRes = await gmail.users.messages.list({
-    userId: 'me',
-    maxResults: Math.min(Number(maxResults) || 50, 50)
-  });
+    // Fetch details in parallel batches of 10 for performance
+    const batchSize = 10;
+    for (let i = 0; i < messagesList.length; i += batchSize) {
+      const batch = messagesList.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (item) => {
+          try {
+            const msgRes = await gmail.users.messages.get({
+              userId: 'me',
+              id: item.id,
+              format: 'full'
+            });
 
-  const messagesList = listRes.data.messages || [];
-  if (messagesList.length === 0) {
-    return 0;
-  }
+            const data = msgRes.data;
+            const payload = data.payload || {};
+            const headers = payload.headers || [];
 
-  const emailsToSave = [];
+            const getHeader = (name) => {
+              const h = headers.find((header) => header.name.toLowerCase() === name.toLowerCase());
+              return h ? h.value : '';
+            };
 
-  // Fetch details in parallel batches of 10 for high performance
-  const batchSize = 10;
-  for (let i = 0; i < messagesList.length; i += batchSize) {
-    const batch = messagesList.slice(i, i + batchSize);
-    await Promise.all(
-      batch.map(async (item) => {
-        try {
-          const msgRes = await gmail.users.messages.get({
-            userId: 'me',
-            id: item.id,
-            format: 'full'
-          });
+            const from = getHeader('From');
+            const rawTo = getHeader('To');
+            const to = rawTo
+              ? rawTo.split(',').map((emailStr) => emailStr.trim()).filter(Boolean)
+              : [];
+            const subject = getHeader('Subject');
 
-          const data = msgRes.data;
-          const payload = data.payload || {};
-          const headers = payload.headers || [];
+            const rawDateHeader = getHeader('Date');
+            let date = rawDateHeader ? new Date(rawDateHeader) : null;
+            if (!date || isNaN(date.getTime())) {
+              date = new Date(parseInt(data.internalDate, 10));
+            }
 
-          const getHeader = (name) => {
-            const h = headers.find((header) => header.name.toLowerCase() === name.toLowerCase());
-            return h ? h.value : '';
-          };
+            const bodyText = extractBodyText(payload);
+            const hasAttachments = checkHasAttachments(payload);
+            const labels = data.labelIds || [];
 
-          const from = getHeader('From');
-          const rawTo = getHeader('To');
-          const to = rawTo
-            ? rawTo.split(',').map((emailStr) => emailStr.trim()).filter(Boolean)
-            : [];
-          const subject = getHeader('Subject');
-
-          const rawDateHeader = getHeader('Date');
-          let date = rawDateHeader ? new Date(rawDateHeader) : null;
-          if (!date || isNaN(date.getTime())) {
-            date = new Date(parseInt(data.internalDate, 10));
+            emailsToSave.push({
+              userId,
+              threadId: data.threadId,
+              messageId: data.id,
+              from,
+              to,
+              subject,
+              snippet: data.snippet || '',
+              bodyText,
+              date,
+              hasAttachments,
+              labels,
+              demo: false
+            });
+          } catch (err) {
+            console.error(`[gmailService] Failed to fetch message ${item.id}:`, err.message);
           }
-
-          const bodyText = extractBodyText(payload);
-          const hasAttachments = checkHasAttachments(payload);
-          const labels = data.labelIds || [];
-
-          emailsToSave.push({
-            userId,
-            threadId: data.threadId,
-            messageId: data.id,
-            from,
-            to,
-            subject,
-            snippet: data.snippet || '',
-            bodyText,
-            date,
-            hasAttachments,
-            labels
-          });
-        } catch (err) {
-          console.error(`[gmailService] Failed to fetch details for message ${item.id}:`, err.message);
-        }
-      })
-    );
-  }
-
-  // Save into GBrain store
-  if (emailsToSave.length > 0) {
-    for (const email of emailsToSave) {
-      await gbrainService.saveEmail(email);
+        })
+      );
     }
+
+    // Save into GBrain store
+    if (emailsToSave.length > 0) {
+      for (const email of emailsToSave) {
+        await gbrainService.saveEmail(email);
+      }
+    }
+
+    syncStateService.recordSyncSuccess('gmail', emailsToSave.length);
+    return emailsToSave.length;
+  } catch (err) {
+    syncStateService.recordSyncError('gmail', err.message);
+    throw err;
   }
-
-  return emailsToSave.length;
-}
-
-/**
- * Stub function to fetch recent user messages matching criteria (legacy interface).
- * @param {Object} tokens - OAuth2 tokens
- * @param {String} query - Gmail search query string
- */
-async function fetchMessages(tokens, query = '') {
-  return fetchRecentEmails();
 }
 
 module.exports = {
   getGmailClient,
-  fetchRecentEmails,
-  fetchMessages
+  fetchRecentEmails
 };

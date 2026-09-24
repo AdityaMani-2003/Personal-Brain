@@ -63,3 +63,33 @@ The system relies on a modern full-stack decoupled architecture:
 
 ## 6. Commit References
 > **Important Directive**: All future commits across this repository MUST reference the relevant section of this specification file (e.g., `feat(backend): implement schema matching section 2 of SPEC.md`).
+
+---
+
+## 7. v1.1 Implementation Notes
+
+The following architectural and behavior-visible deltas refine the implementation of the core specification:
+
+1. **Truthful Ingestion & Explicit Demo Mode**:
+   - Automatic syncs return structured `NOT_CONNECTED` errors if OAuth credentials are not configured. No synthetic data is written into user entity directories.
+   - An explicit, user-triggered Demo Mode (`POST /api/demo/load` and `DELETE /api/demo`) allows inspecting the platform using sample Stripe/Alice emails and Alice/Bob calendar events tagged with `demo: true`.
+
+2. **Truthful Answering Engine Labeling**:
+   - Chat responses explicitly advertise the execution engine: `"gemini"` (Gemini 2.0 Flash with function calling) or `"local"` (grounded deterministic rule-based engine when `GEMINI_API_KEY` is omitted).
+   - Server-Sent Events (SSE) stream emits an initial `{type: "meta", engine: "gemini"|"local"}` event.
+
+3. **Visible Grounding & Sources Panel**:
+   - The SSE protocol broadcasts `{type: "tool", name, args, resultCount, status}` events around each function call.
+   - The UI surfaces a collapsible **Sources Searched** card on each assistant message, providing verifiable grounding and explicit guidance when zero entities match.
+
+4. **App-Session Gate (Single-User Model)**:
+   - On Google OAuth callback, an HMAC-signed `httpOnly` `SameSite=Lax` session cookie is established.
+   - Mutating and personal data endpoints (`/api/chat`, `/api/store/*` deletions, `/api/ingest/*`, `/api/activity`) require this session in production deployments.
+
+5. **Server-Side Sync State & Audit Logging**:
+   - Connector statuses (`lastAttemptAt`, `lastSuccessAt`, `lastError`, `lastSyncedCount`, `status`) and an in-memory activity ring buffer (50 items) are managed by `syncStateService` and persisted to `server/data/sync_state.json` (file mode `0o600`).
+
+6. **Storage Manager Pagination & Directory Traversal Protection**:
+   - Entity deletion strictly validates IDs against `/^[A-Za-z0-9_@.\-]+$/` and verifies path resolution within the respective entity directory.
+   - Full server-side pagination (`GET /api/store/emails` and `GET /api/store/events`) replaces arbitrary 15-item readdir slicing.
+

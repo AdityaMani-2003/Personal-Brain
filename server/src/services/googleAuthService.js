@@ -1,9 +1,12 @@
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const SINGLE_USER_ID = 'default_user';
-const TOKEN_FILE_PATH = path.join(__dirname, '../../data/gbrain/tokens.json');
+const DATA_DIR = path.resolve(__dirname, '../../data');
+const TOKEN_FILE_PATH = path.join(DATA_DIR, 'tokens.json');
+const LEGACY_TOKEN_FILE = path.join(DATA_DIR, 'gbrain/tokens.json');
 
 const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
@@ -12,7 +15,37 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly'
 ];
 
+// In-memory OAuth state nonces for CSRF protection with 10-minute expiry
+const validStates = new Map();
+
+function cleanExpiredStates() {
+  const now = Date.now();
+  for (const [state, timestamp] of validStates.entries()) {
+    if (now - timestamp > 10 * 60 * 1000) {
+      validStates.delete(state);
+    }
+  }
+}
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
 function readTokenData() {
+  // Migrate legacy tokens file if present
+  if (!fs.existsSync(TOKEN_FILE_PATH) && fs.existsSync(LEGACY_TOKEN_FILE)) {
+    try {
+      const legacyData = fs.readFileSync(LEGACY_TOKEN_FILE, 'utf8');
+      ensureDataDir();
+      fs.writeFileSync(TOKEN_FILE_PATH, legacyData, { encoding: 'utf8', mode: 0o600 });
+      fs.unlinkSync(LEGACY_TOKEN_FILE);
+    } catch (e) {
+      // Ignore migration errors
+    }
+  }
+
   if (!fs.existsSync(TOKEN_FILE_PATH)) return null;
   try {
     const raw = fs.readFileSync(TOKEN_FILE_PATH, 'utf8');
@@ -23,14 +56,16 @@ function readTokenData() {
 }
 
 function writeTokenData(data) {
-  const dir = path.dirname(TOKEN_FILE_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(TOKEN_FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
+  ensureDataDir();
+  fs.writeFileSync(TOKEN_FILE_PATH, JSON.stringify(data, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600
+  });
 }
 
 function getRedirectUri(req) {
   const envUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
-  if (envUri && envUri.startsWith('http') && !envUri.includes('localhost')) {
+  if (envUri) {
     return envUri;
   }
   if (req) {
@@ -38,13 +73,11 @@ function getRedirectUri(req) {
     const host = req.headers.host;
     return `${protocol}://${host}/api/auth/google/callback`;
   }
-  return envUri || 'http://localhost:5000/api/auth/google/callback';
+  return 'http://localhost:5000/api/auth/google/callback';
 }
 
 /**
  * Creates a raw OAuth2 client instance using environment configuration or dynamic request host.
- * @param {Object} [req] - Express request object
- * @returns {google.auth.OAuth2}
  */
 function createOAuth2Client(req) {
   const redirectUri = getRedirectUri(req);
@@ -56,24 +89,37 @@ function createOAuth2Client(req) {
 }
 
 /**
- * Generates the Google OAuth 2.0 consent URL for Gmail and Calendar read-only scopes.
- * @param {Object} [req] - Express request object
- * @returns {string} Auth consent screen URL
+ * Generates the Google OAuth 2.0 consent URL with CSRF state protection.
  */
 function getAuthUrl(req) {
+  cleanExpiredStates();
+  const state = crypto.randomBytes(24).toString('hex');
+  validStates.set(state, Date.now());
+
   const oAuth2Client = createOAuth2Client(req);
   return oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: SCOPES
+    scope: SCOPES,
+    state
   });
 }
 
 /**
- * Exchanges authorization code for tokens and stores tokens locally in GBrain store.
- * @param {string} code - Authorization code from Google OAuth callback
- * @param {Object} [req] - Express request object
- * @returns {Promise<Object>} { tokenDoc, user }
+ * Validates state parameter returned from Google OAuth callback.
+ */
+function verifyState(state) {
+  if (!state) return false;
+  cleanExpiredStates();
+  const isValid = validStates.has(state);
+  if (isValid) {
+    validStates.delete(state);
+  }
+  return isValid;
+}
+
+/**
+ * Exchanges authorization code for tokens and stores tokens locally in server/data/tokens.json.
  */
 async function handleCallback(code, req) {
   if (!code) {
@@ -110,12 +156,11 @@ async function handleCallback(code, req) {
   };
 
   writeTokenData(updateData);
-  console.log(`[googleAuthService] Token saved for user: ${updateData.user.email}`);
   return { tokenDoc: updateData, user: updateData.user };
 }
 
 /**
- * Retrieves the primary authenticated user from GBrain local store.
+ * Retrieves the primary authenticated user from local tokens.json.
  */
 async function getCurrentUser() {
   const data = readTokenData();
@@ -129,7 +174,9 @@ async function getAuthedClient() {
   const tokenDoc = readTokenData();
 
   if (!tokenDoc || !tokenDoc.access_token) {
-    throw new Error('No OAuth tokens found in database. Please authenticate at /auth/google first.');
+    const err = new Error('No OAuth tokens found. Please connect your Google account.');
+    err.code = 'NOT_CONNECTED';
+    throw err;
   }
 
   const oAuth2Client = createOAuth2Client();
@@ -157,12 +204,25 @@ async function getAuthedClient() {
   return oAuth2Client;
 }
 
+/**
+ * Disconnects the active Google account and removes tokens.json.
+ */
+async function disconnect() {
+  if (fs.existsSync(TOKEN_FILE_PATH)) {
+    fs.unlinkSync(TOKEN_FILE_PATH);
+    return true;
+  }
+  return false;
+}
+
 module.exports = {
   SINGLE_USER_ID,
   SCOPES,
   createOAuth2Client,
   getAuthUrl,
+  verifyState,
   handleCallback,
   getCurrentUser,
-  getAuthedClient
+  getAuthedClient,
+  disconnect
 };

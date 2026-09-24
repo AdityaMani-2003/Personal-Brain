@@ -1,113 +1,234 @@
 # Personal Brain
 
-**Personal Brain** is a conversational productivity agent built with Express, React (Vite), Node.js, **GBrain** (https://github.com/garrytan/gbrain) as the persistent knowledge store, and **Gemini API (Function Calling)**. It allows users to ask natural-language questions across synchronized Gmail and Google Calendar data with grounded, cross-source reasoning.
+**Personal Brain** is a truthful, single-user personal intelligence workspace. It securely connects to your Google account (read-only Gmail and Google Calendar scopes), synchronizes your communication and schedule into a local file-based **GBrain** entity store, and answers natural-language productivity questions using **Gemini 2.5 Flash function calling** with verifiable, grounded reasoning.
 
-- 🌐 **Live Deployed App**: [https://personal-brain-c5bn.onrender.com/](https://personal-brain-c5bn.onrender.com/)
-- 💻 **GitHub Repository**: [https://github.com/AdityaMani-2003/Personal-Brain](https://github.com/AdityaMani-2003/Personal-Brain)
-
-For full project requirements, query specifications, exact field schemas, and architectural details, please refer to [SPEC.md](SPEC.md).
-
----
-
-## Shipped & Verified Features
-
-- **Tier 1 Queries (Single Source)**:
-  - Calendar agenda lookups ("What's on my calendar tomorrow?")
-  - Email search by sender / topic ("Find the email from Stripe about the failed payment")
-  - Unread email filtering ("List my unread emails from this week")
-- **Tier 2 Queries (Cross-Source Correlation)**:
-  - Cross-references Google Calendar meetings with Gmail email threads ("What meetings do I have this week, and which ones have a related email thread I haven't replied to?")
-- **Strict Grounding & Anti-Hallucination**:
-  - Responds with explicit "I couldn't find matching information" when data is absent in GBrain store.
-- **Utilitarian Dashboard UI (Linear-Inspired)**:
-  - High-density productivity theme (`Plus Jakarta Sans` & `JetBrains Mono` typography pairing).
-  - Left status sidebar with live connector controls, store stats, and quick starter queries.
-  - Interactive GBrain Storage Manager for inspecting raw entity JSON pages.
-  - Streaming tool execution status indicators.
+- 🌐 **Live Application**: [https://personal-brain-c5bn.onrender.com/](https://personal-brain-c5bn.onrender.com/)
+- 💻 **Source Repository**: [https://github.com/AdityaMani-2003/Personal-Brain](https://github.com/AdityaMani-2003/Personal-Brain)
+- 📋 **Specification**: [SPEC.md](SPEC.md)
+- 📝 **Architectural Decisions**: [DECISIONS.md](DECISIONS.md)
 
 ---
 
-## Project Structure
+## Architecture Diagram
 
 ```
-/
-├── SPEC.md             # Core specification document (SDD)
-├── README.md           # Getting started, setup, and deployment guide
-├── render.yaml         # Render deployment configuration
-├── server/             # Express/Node backend & GBrain integration
-│   ├── src/
-│   │   ├── services/   # gbrainService, gmailService, calendarService, geminiService
-│   │   ├── routes/     # auth, ingest, chat, store
-│   │   ├── app.js      # Express app setup & middleware
-│   │   └── server.js   # Server entry point
-│   ├── .env.example    # Environment variable template
-│   └── package.json    # Server dependencies
-└── client/             # React frontend (Vite)
-    ├── src/
-    │   ├── components/ # ChatWindow & dashboard UI
-    │   ├── App.jsx     # Main layout shell
-    │   └── index.css   # Dark productivity styling system
-    ├── index.html
-    └── package.json    # Client dependencies
++-----------------------------------------------------------------------------------+
+|                              REACT FRONTEND (VITE)                                |
+|  - High-density Linear-inspired workspace       - Stacking notifications         |
+|  - Real-time SSE streaming + tool pills         - Collapsible Sources panel       |
+|  - Paginated GBrain Storage Manager drawer      - Mobile responsive (<768px)      |
++-----------------------------------------+-----------------------------------------+
+                                          |
+                         HTTP / REST & SSE Streaming (Same-Origin / Proxy)
+                                          |
++-----------------------------------------v-----------------------------------------+
+|                               EXPRESS / NODE BACKEND                              |
+|  - Helmet security headers & rate limits        - Session cookie gate (HMAC)      |
+|  - Real connector syncStateService              - Sanitized centralized errors    |
+|  - Input validation & traversal protection      - Graceful shutdown (SIGTERM)     |
++--------------------+------------------------------------+-------------------------+
+                     |                                    |
+      Google OAuth & APIs (Read-Only)                     | Function Calling (v1beta)
+                     |                                    |
++--------------------v-------------+     +----------------v-------------------------+
+|    GOOGLE CLOUD PLATFORM         |     |          GEMINI 2.5 FLASH                |
+|  - Gmail API (messages.readonly) |     |  - Tool: search_emails                   |
+|  - Calendar API (events.readonly)|     |  - Tool: search_calendar_events          |
+|  - UserInfo (email, profile)     |     |  - Fallback: Local deterministic engine  |
++--------------------+-------------+     +----------------+-------------------------+
+                     |                                    |
+                     +------------------+-----------------+
+                                        | Read / Query
+                                        v
++-----------------------------------------------------------------------------------+
+|                        LOCAL GBRAIN PERSISTENT STORE                              |
+|  - server/data/gbrain/emails/email_<id>.json                                      |
+|  - server/data/gbrain/events/event_<id>.json                                      |
+|  - server/data/tokens.json (Mode 0600)                                            |
+|  - server/data/sync_state.json (Mode 0600)                                        |
++-----------------------------------------------------------------------------------+
 ```
+
+---
+
+## Core Shipped Features
+
+1. **Truthful AI Reasoning**:
+   - **Grounded Answering**: Powered by Gemini 2.5 Flash tool-use over local GBrain JSON files.
+   - **Engine Transparency**: Assistant messages visibly display whether they were generated by Gemini or the deterministic local engine.
+   - **Sources & Evidence Panel**: Collapsible drawer showing the exact tools called, search parameters, and match counts.
+   - **Zero-Result Transparency**: Clearly states when information is absent and suggests actionable next steps.
+   - **Stream Cancellation**: Stop generation at any time via composer Stop button or client disconnect.
+
+2. **Google Integrations (Read-Only)**:
+   - **Gmail Ingestion**: Fetches recent emails with multipart plain-text extraction, attachment indicators, and label indexing.
+   - **Calendar Ingestion**: Fetches scheduled calendar events with date ranges, attendee acceptance statuses, and locations.
+   - **Truthful Connector Cards**: Live status indicator dots, relative sync times, error banners with Retry actions, and indexed counts.
+   - **CSRF State Verification**: OAuth state nonce prevents authorization interception.
+
+3. **GBrain Storage Manager**:
+   - Slide-over full-height drawer (full-screen on mobile).
+   - Server-side pagination and debounced (300ms) full-text searching across emails and events.
+   - Structured entity inspection (from, to, date, badges, snippet, body) with a Raw JSON toggle.
+   - Safe entity deletion protected against directory traversal attacks.
+
+4. **Exploration Demo Mode**:
+   - One-click **"Load Demo Data"** action creates labeled sample Stripe/Alice emails and meetings.
+   - One-click **"Remove Demo Data"** clears only demo entities, preserving user-synchronized data.
+
+5. **Accessibility & Responsive Polish**:
+   - Complete responsive adaptation down to 375px mobile viewports with off-canvas navigation.
+   - Stacking toast notification system with pause-on-hover.
+   - Full keyboard navigation (`/` to focus composer, `Esc` to dismiss drawers/dialogs).
+   - Respects `prefers-reduced-motion` accessibility settings.
+
+---
+
+## Single-User Trust Model & Security
+
+Personal Brain is designed for single-user productivity. The first Google account that completes OAuth authorization on an instance becomes the authorized owner:
+
+- **Session Gate**: Upon OAuth completion, an HMAC-signed `httpOnly` `SameSite=Lax` session cookie (`pb_session`) is issued.
+- **Protected Surface**: `/api/chat`, `/api/store/*` deletions, `/api/ingest/*`, and `/api/activity` require an authenticated session in production.
+- **Local Data Storage**: Synchronized emails and calendar events are stored as plaintext JSON in `server/data/gbrain/`. Sensitive credentials (`tokens.json` and `sync_state.json`) are written outside the entity directory with restricted file permissions (`0o600`).
+- **Data Minimization**: Personal Brain only requests read-only OAuth scopes (`gmail.readonly`, `calendar.readonly`). It contains no endpoints or code capable of drafting or sending emails, creating events, or altering your Google account.
 
 ---
 
 ## Local Setup & Development
 
-### 1. Server Setup
+### Prerequisites
+- Node.js >= 18 (Tested on Node v24)
+- Google Cloud Project with Gmail & Google Calendar APIs enabled
+- Gemini API Key from Google AI Studio (optional; local deterministic engine functions without it)
+
+### 1. Repository Setup
 
 ```bash
-cd server
-npm install
-cp .env.example .env
+git clone https://github.com/AdityaMani-2003/Personal-Brain.git
+cd Personal-Brain
+npm install --prefix server
+npm install --prefix client
+```
+
+### 2. Configure Google Cloud OAuth
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) -> **APIs & Services** -> **Enabled APIs & Services**.
+2. Enable **Gmail API** and **Google Calendar API**.
+3. Under **OAuth consent screen**, choose **External**, enter your application name, and add test users.
+4. Under **Credentials**, click **Create Credentials** -> **OAuth Client ID** -> **Web Application**.
+5. Add **Authorized redirect URIs**:
+   - `http://localhost:5000/api/auth/google/callback` (for local development)
+   - `https://your-service.onrender.com/api/auth/google/callback` (for production)
+6. Copy the **Client ID** and **Client Secret**.
+
+### 3. Configure Environment Variables
+
+Create `server/.env` based on `server/.env.example`:
+
+```bash
+cp server/.env.example server/.env
 ```
 
 Populate `server/.env`:
-- `GBRAIN_DATA_DIR=./data/gbrain`
-- `GOOGLE_CLIENT_ID=<your-gcp-oauth-client-id>`
-- `GOOGLE_CLIENT_SECRET=<your-gcp-oauth-client-secret>`
-- `GOOGLE_REDIRECT_URI=http://localhost:5000/api/auth/google/callback`
-- `GEMINI_API_KEY=<your-gemini-api-key>`
 
-Start backend server:
+```env
+PORT=5000
+NODE_ENV=development
+SESSION_SECRET=change_this_to_a_random_32_byte_hex_string
+GBRAIN_DATA_DIR=./data/gbrain
+GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:5000/api/auth/google/callback
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+### 4. Running the Development Server
+
+Start both backend and Vite frontend concurrently:
+
 ```bash
 npm run dev
 ```
-*Server runs on `http://localhost:5000`.*
 
-### 2. Client Setup
+- **Frontend**: `http://localhost:3000` (proxies `/api` to backend)
+- **Backend API**: `http://localhost:5000`
 
-In a new terminal:
+---
+
+## Verification & Testing Suite
+
+Run the unified verification pipeline:
+
 ```bash
-cd client
-npm install
-npm run dev
+npm run verify
 ```
-*Client runs on `http://localhost:3000`.*
+
+This executes:
+1. **Server Unit & Integration Tests**: `npm test --prefix server` (17 tests covering services, routes, directory traversal, and operator precedence).
+2. **Client Production Build**: `npm run build --prefix client` (verifies bundling, module imports, and checks that no secrets are embedded in static assets).
 
 ---
 
-## Deployment Guide
+## Environment Variables Reference
 
-### Backend (Render)
-1. Link repository to Render as a Web Service using `render.yaml`.
-2. Configure Environment Variables in Render Dashboard:
-   - `GEMINI_API_KEY`
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_REDIRECT_URI` (e.g., `https://your-app.onrender.com/api/auth/google/callback`)
-3. Add the Render OAuth callback URL to your Google Cloud Console OAuth 2.0 Client Redirect URIs.
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | No | `5000` (Local) / `10000` (Render) | HTTP port for Express server. |
+| `NODE_ENV` | No | `development` | Environment mode (`development` or `production`). |
+| `SESSION_SECRET` | Recommended | Auto-generated | HMAC signing secret for session cookies. |
+| `GBRAIN_DATA_DIR` | No | `./data/gbrain` | Filesystem path for GBrain entity JSON files. |
+| `GOOGLE_CLIENT_ID` | Optional* | None | GCP OAuth 2.0 Web Client ID. |
+| `GOOGLE_CLIENT_SECRET` | Optional* | None | GCP OAuth 2.0 Web Client Secret. |
+| `GOOGLE_REDIRECT_URI` | Optional* | Auto-derived | Fully qualified OAuth callback URL. |
+| `GEMINI_API_KEY` | Optional* | None | API key from Google AI Studio. |
 
-### Frontend (Vercel)
-- Deploy `client` to Vercel or serve built static assets directly via Express (`npm run build --prefix client`).
+*\* Note: The application boots cleanly into honest degraded/demo mode when optional API keys are omitted.*
 
 ---
 
-## Specification Traceability
+## Deployment (Render)
 
-All features correspond directly to [SPEC.md](SPEC.md):
-- **Data Models**: Section 2 (Exact Gmail & Calendar fields synced into GBrain entity store)
-- **Supported Queries**: Section 3 (Tier 1 & Tier 2 query handling)
-- **Architecture**: Section 4 (React $\rightarrow$ Express $\rightarrow$ GBrain Store $\rightarrow$ Gemini Function Calling)
-- **Non-Goals**: Section 5 (Strict read-only viewer; no email drafting or event creation)
+This repository includes a production-ready `render.yaml` specification for single-service deployment.
+
+### Persistent Disk Configuration
+Because GBrain stores data in `server/data/`, ephemeral cloud containers lose synchronized entities and OAuth tokens upon restart. The `render.yaml` attaches a persistent disk:
+
+```yaml
+services:
+  - type: web
+    name: personal-brain
+    env: node
+    buildCommand: npm install --prefix server && npm install --prefix client && npm run build --prefix client
+    startCommand: node server/src/server.js
+    disk:
+      name: gbrain-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+```
+
+> **Note on Free-Tier Deployment**: If deploying without Render Disks, the application remains fully functional, but data and tokens will reset on service restart or redeploy.
+
+---
+
+## Known Limitations
+
+- **Single User**: Designed for one personal Google account per instance.
+- **Batch Cap**: Gmail synchronization syncs up to 50 recent messages per request to respect rate limits.
+- **Substring Filtering**: In-memory and disk queries use exact substring and date boundary filters rather than vector embeddings.
+- **Single-Turn Chat**: Designed for atomic, grounded answers over synchronized data rather than multi-turn conversational memory.

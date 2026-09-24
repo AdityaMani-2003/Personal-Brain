@@ -1,64 +1,105 @@
 const express = require('express');
 const router = express.Router();
 const geminiService = require('../services/geminiService');
+const { requireSession } = require('../middleware/sessionGate');
+const { validateQuery } = require('../utils/validator');
+const syncStateService = require('../services/syncStateService');
 
 /**
  * Conversational Chat Routes
  * 
  * SPEC.md References:
  * - Section 3: Supported query types (Tier 1 & Tier 2 questions)
- * - Section 4: Express Backend <---> Gemini API (Function Calling) <---> MongoDB Store
+ * - Section 4: Express Backend <---> Gemini API (Function Calling) <---> GBrain Store
  */
 
 // @route   POST /api/chat
-// @desc    Process natural-language query using Gemini API function calling over stored Gmail and Calendar data
-// @access  Public
-// Implements SPEC.md Section 3 (Tier 1 & Tier 2 query handling) & Section 4 (Gemini function calling)
-router.post('/', async (req, res) => {
-  const query = req.body.query || req.body.message;
-  const isStream = req.body.stream !== false && (req.headers.accept === 'text/event-stream' || req.body.stream === true);
+// @desc    Process natural-language query using Gemini API function calling or local engine
+router.post('/', requireSession, async (req, res, next) => {
+  const rawQuery = req.body.query || req.body.message;
+  const tzOffset = req.body.tzOffset;
 
-  if (!query || typeof query !== 'string' || !query.trim()) {
-    return res.status(400).json({ error: 'Query string is required in request body.' });
+  if (!validateQuery(rawQuery)) {
+    return res.status(400).json({
+      status: 'error',
+      code: 'INVALID_QUERY',
+      message: 'Query is required and must be between 1 and 2,000 characters.'
+    });
   }
+
+  const query = rawQuery.trim();
+  const isStream = req.body.stream !== false && (req.headers.accept === 'text/event-stream' || req.body.stream === true);
 
   if (isStream) {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    if (res.flushHeaders) res.flushHeaders();
+
+    const controller = new AbortController();
+    let isClientClosed = false;
+
+    req.on('close', () => {
+      isClientClosed = true;
+      controller.abort();
+    });
+
+    // Send heartbeat to prevent proxy timeouts
+    const heartbeat = setInterval(() => {
+      if (!isClientClosed && !res.writableEnded) {
+        res.write(': heartbeat\n\n');
+      }
+    }, 15000);
+
+    const safeWrite = (data) => {
+      if (!isClientClosed && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      }
+    };
 
     try {
       await geminiService.answerQueryStream(
-        query.trim(),
-        (chunk) => {
-          res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
-        },
-        (status) => {
-          res.write(`data: ${JSON.stringify({ type: 'status', message: status })}\n\n`);
+        query,
+        { tzOffset, signal: controller.signal },
+        {
+          onMeta: (meta) => safeWrite({ type: 'meta', ...meta }),
+          onTool: (tool) => safeWrite({ type: 'tool', ...tool }),
+          onChunk: (chunk) => safeWrite({ type: 'chunk', text: chunk }),
+          onStatus: (status) => safeWrite({ type: 'status', message: status })
         }
       );
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+
+      safeWrite({ type: 'done' });
+      clearInterval(heartbeat);
       res.end();
+
+      syncStateService.recordActivity({
+        type: 'query',
+        status: 'success',
+        message: `Chat query processed: "${query.slice(0, 50)}${query.length > 50 ? '...' : ''}"`
+      });
     } catch (error) {
-      console.error('[Chat Stream Error] Failed to stream query with Gemini API:', error.message);
-      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      clearInterval(heartbeat);
+      console.error('[Chat Stream Error]:', error.message);
+      safeWrite({
+        type: 'error',
+        error: error.message || 'Error processing query',
+        recoverable: true
+      });
       res.end();
     }
   } else {
     try {
-      const response = await geminiService.answerQuery(query.trim());
-      res.json({
-        query: response.query,
-        reply: response.reply,
-        status: 'success'
+      const response = await geminiService.answerQuery(query, { tzOffset });
+      res.json(response);
+
+      syncStateService.recordActivity({
+        type: 'query',
+        status: 'success',
+        message: `Chat query processed: "${query.slice(0, 50)}${query.length > 50 ? '...' : ''}"`
       });
     } catch (error) {
-      console.error('[Chat Error] Failed to process query with Gemini API:', error.message);
-      res.status(500).json({
-        error: 'Failed to process chat query',
-        details: error.message,
-        status: 'error'
-      });
+      next(error);
     }
   }
 });
