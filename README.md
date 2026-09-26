@@ -1,234 +1,152 @@
-# Personal Brain
+﻿# Personal Brain
 
-**Personal Brain** is a truthful, single-user personal intelligence workspace. It securely connects to your Google account (read-only Gmail and Google Calendar scopes), synchronizes your communication and schedule into a local file-based **GBrain** entity store, and answers natural-language productivity questions using **Gemini 2.5 Flash function calling** with verifiable, grounded reasoning.
+Personal Brain is a single-user productivity workspace that syncs with Google Calendar and Gmail to answer natural-language schedule and email queries using **Google Gemini 2.5 Flash function calling**. 
 
-- 🌐 **Live Application**: [https://personal-brain-c5bn.onrender.com/](https://personal-brain-c5bn.onrender.com/)
-- 💻 **Source Repository**: [https://github.com/AdityaMani-2003/Personal-Brain](https://github.com/AdityaMani-2003/Personal-Brain)
-- 📋 **Specification**: [SPEC.md](SPEC.md)
-- 📝 **Architectural Decisions**: [DECISIONS.md](DECISIONS.md)
+Rather than relying on generic LLM knowledge or hallucinated context, it connects directly to authorized Google APIs (read-only scopes), synchronizes data into a local entity store (`GBrain`), and executes deterministic tool calls to retrieve and cite actual emails and events.
+
+**Live Application:** [personal-brain-c5bn.onrender.com](https://personal-brain-c5bn.onrender.com/)  
+**Repository:** [github.com/AdityaMani-2003/Personal-Brain](https://github.com/AdityaMani-2003/Personal-Brain)
 
 ---
 
-## Architecture Diagram
+## Architecture Overview
+
+Personal Brain is structured as a full-stack Node.js + React application. Communication between client and server uses HTTP REST for commands and Server-Sent Events (SSE) for streaming conversational responses with live tool-execution pills.
 
 ```
-+-----------------------------------------------------------------------------------+
-|                              REACT FRONTEND (VITE)                                |
-|  - High-density Linear-inspired workspace       - Stacking notifications         |
-|  - Real-time SSE streaming + tool pills         - Collapsible Sources panel       |
-|  - Paginated GBrain Storage Manager drawer      - Mobile responsive (<768px)      |
-+-----------------------------------------+-----------------------------------------+
-                                          |
-                         HTTP / REST & SSE Streaming (Same-Origin / Proxy)
-                                          |
-+-----------------------------------------v-----------------------------------------+
-|                               EXPRESS / NODE BACKEND                              |
-|  - Helmet security headers & rate limits        - Session cookie gate (HMAC)      |
-|  - Real connector syncStateService              - Sanitized centralized errors    |
-|  - Input validation & traversal protection      - Graceful shutdown (SIGTERM)     |
-+--------------------+------------------------------------+-------------------------+
-                     |                                    |
-      Google OAuth & APIs (Read-Only)                     | Function Calling (v1beta)
-                     |                                    |
-+--------------------v-------------+     +----------------v-------------------------+
-|    GOOGLE CLOUD PLATFORM         |     |          GEMINI 2.5 FLASH                |
-|  - Gmail API (messages.readonly) |     |  - Tool: search_emails                   |
-|  - Calendar API (events.readonly)|     |  - Tool: search_calendar_events          |
-|  - UserInfo (email, profile)     |     |  - Fallback: Local deterministic engine  |
-+--------------------+-------------+     +----------------+-------------------------+
-                     |                                    |
-                     +------------------+-----------------+
-                                        | Read / Query
-                                        v
-+-----------------------------------------------------------------------------------+
-|                        LOCAL GBRAIN PERSISTENT STORE                              |
-|  - server/data/gbrain/emails/email_<id>.json                                      |
-|  - server/data/gbrain/events/event_<id>.json                                      |
-|  - server/data/tokens.json (Mode 0600)                                            |
-|  - server/data/sync_state.json (Mode 0600)                                        |
-+-----------------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────┐
+│                 React Frontend (Vite)                       │
+│  - Linear-inspired dark workspace interface                 │
+│  - Real-time SSE streaming with tool execution status pills │
+│  - Storage Manager drawer with entity counts & manual sync  │
+│  - Collapsible Sources panel displaying ground-truth citations│
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTP / SSE Stream
+┌──────────────────────────────▼──────────────────────────────┐
+│                  Express.js Backend Server                  │
+│  - Google OAuth2 Token Management (Refresh & Session Gate)  │
+│  - Tool Definition & Dispatch Engine                        │
+│  - Local File-Based Entity Store (GBrain)                   │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │ OAuth2 (Read-Only)           │ Function Calling
+┌──────────────▼─────────────┐ ┌──────────────▼───────────────┐
+│     Google Workspace       │ │     Google DeepMind          │
+│  - Google Calendar API v3  │ │  - Gemini 2.5 Flash Model    │
+│  - Gmail REST API v1       │ │  - Structured Tool Calls     │
+└────────────────────────────┘ └──────────────────────────────┘
 ```
 
 ---
 
-## Core Shipped Features
+## How It Works: The Function Calling Loop
 
-1. **Truthful AI Reasoning**:
-   - **Grounded Answering**: Powered by Gemini 2.5 Flash tool-use over local GBrain JSON files.
-   - **Engine Transparency**: Assistant messages visibly display whether they were generated by Gemini or the deterministic local engine.
-   - **Sources & Evidence Panel**: Collapsible drawer showing the exact tools called, search parameters, and match counts.
-   - **Zero-Result Transparency**: Clearly states when information is absent and suggests actionable next steps.
-   - **Stream Cancellation**: Stop generation at any time via composer Stop button or client disconnect.
-
-2. **Google Integrations (Read-Only)**:
-   - **Gmail Ingestion**: Fetches recent emails with multipart plain-text extraction, attachment indicators, and label indexing.
-   - **Calendar Ingestion**: Fetches scheduled calendar events with date ranges, attendee acceptance statuses, and locations.
-   - **Truthful Connector Cards**: Live status indicator dots, relative sync times, error banners with Retry actions, and indexed counts.
-   - **CSRF State Verification**: OAuth state nonce prevents authorization interception.
-
-3. **GBrain Storage Manager**:
-   - Slide-over full-height drawer (full-screen on mobile).
-   - Server-side pagination and debounced (300ms) full-text searching across emails and events.
-   - Structured entity inspection (from, to, date, badges, snippet, body) with a Raw JSON toggle.
-   - Safe entity deletion protected against directory traversal attacks.
-
-4. **Exploration Demo Mode**:
-   - One-click **"Load Demo Data"** action creates labeled sample Stripe/Alice emails and meetings.
-   - One-click **"Remove Demo Data"** clears only demo entities, preserving user-synchronized data.
-
-5. **Accessibility & Responsive Polish**:
-   - Complete responsive adaptation down to 375px mobile viewports with off-canvas navigation.
-   - Stacking toast notification system with pause-on-hover.
-   - Full keyboard navigation (`/` to focus composer, `Esc` to dismiss drawers/dialogs).
-   - Respects `prefers-reduced-motion` accessibility settings.
+1. **User Query:** The user asks a natural-language question (e.g., *"What meetings do I have tomorrow afternoon, and did Alex email the slide deck?"*).
+2. **Tool Selection:** The backend passes the query along with tool schemas (`query_calendar`, `query_emails`, `search_contacts`) to Gemini 2.5 Flash.
+3. **Model Function Call:** The model decides which tools to call and outputs structured arguments:
+   ```json
+   {
+     "name": "query_calendar",
+     "args": {
+       "timeMin": "2026-09-27T12:00:00Z",
+       "timeMax": "2026-09-27T23:59:59Z"
+     }
+   }
+   ```
+4. **Backend Execution:** The backend executes the requested Google Calendar/Gmail queries against the authenticated user's account or local GBrain store.
+5. **Tool Result Returned:** The raw results (event times, attendees, email snippets) are fed back into the Gemini model conversation history.
+6. **Grounded Response Streamed:** Gemini synthesizes the verified facts into a final response, streamed via SSE to the user alongside clickable source citations.
 
 ---
 
-## Single-User Trust Model & Security
+## Core Features
 
-Personal Brain is designed for single-user productivity. The first Google account that completes OAuth authorization on an instance becomes the authorized owner:
-
-- **Session Gate**: Upon OAuth completion, an HMAC-signed `httpOnly` `SameSite=Lax` session cookie (`pb_session`) is issued.
-- **Protected Surface**: `/api/chat`, `/api/store/*` deletions, `/api/ingest/*`, and `/api/activity` require an authenticated session in production.
-- **Local Data Storage**: Synchronized emails and calendar events are stored as plaintext JSON in `server/data/gbrain/`. Sensitive credentials (`tokens.json` and `sync_state.json`) are written outside the entity directory with restricted file permissions (`0o600`).
-- **Data Minimization**: Personal Brain only requests read-only OAuth scopes (`gmail.readonly`, `calendar.readonly`). It contains no endpoints or code capable of drafting or sending emails, creating events, or altering your Google account.
+- **Read-Only Security Scopes:** Uses least-privilege OAuth scopes (`gmail.readonly`, `calendar.readonly`). Personal Brain never requests send or delete permissions.
+- **Local GBrain Entity Store:** Synchronizes recent emails and upcoming calendar entries into local structured JSON storage, enabling instant search and offline reasoning without repetitive external API latency.
+- **Storage Manager Drawer:** Transparent in-browser panel showing the number of cached emails, events, and sync timestamps, with one-click data purge or manual resync.
+- **Real-Time Tool Pills:** The chat interface visually displays when Gemini is querying Google Calendar vs. Gmail, showing users exactly where information originated.
 
 ---
 
-## Local Setup & Development
+## Project Structure
 
-### Prerequisites
-- Node.js >= 18 (Tested on Node v24)
-- Google Cloud Project with Gmail & Google Calendar APIs enabled
-- Gemini API Key from Google AI Studio (optional; local deterministic engine functions without it)
+```
+Personal-Brain/
+├── client/                     # React + Vite Frontend
+│   ├── src/
+│   │   ├── components/         # ChatWindow, SourcesPanel, StorageManager, TopBar
+│   │   ├── hooks/              # useChatStream (SSE), useConnectors, useStoreStats
+│   │   ├── lib/                # API client configuration
+│   │   └── App.jsx             # Main layout & workspace state
+│   └── package.json
+├── server/                     # Node.js + Express Backend
+│   ├── src/
+│   │   ├── middleware/         # sessionGate.js (OAuth session check)
+│   │   ├── routes/             # auth.js, chat.js, connectors.js, store.js
+│   │   ├── services/           # geminiService.js, calendarService.js, gmailService.js
+│   │   └── server.js           # Express app bootstrap
+│   └── package.json
+└── render.yaml                 # Render deployment blueprint
+```
 
-### 1. Repository Setup
+---
 
+## Local Development Setup
+
+### 1. Clone & Install
 ```bash
 git clone https://github.com/AdityaMani-2003/Personal-Brain.git
 cd Personal-Brain
-npm install --prefix server
-npm install --prefix client
 ```
 
-### 2. Configure Google Cloud OAuth
+### 2. Configure Google Cloud Console
+1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the **Gmail API** and **Google Calendar API**.
+3. Create OAuth 2.0 Web Application credentials:
+   - Authorized redirect URI: `http://localhost:5000/api/auth/google/callback`
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/) -> **APIs & Services** -> **Enabled APIs & Services**.
-2. Enable **Gmail API** and **Google Calendar API**.
-3. Under **OAuth consent screen**, choose **External**, enter your application name, and add test users.
-4. Under **Credentials**, click **Create Credentials** -> **OAuth Client ID** -> **Web Application**.
-5. Add **Authorized redirect URIs**:
-   - `http://localhost:5000/api/auth/google/callback` (for local development)
-   - `https://your-service.onrender.com/api/auth/google/callback` (for production)
-6. Copy the **Client ID** and **Client Secret**.
-
-### 3. Configure Environment Variables
-
-Create `server/.env` based on `server/.env.example`:
-
-```bash
-cp server/.env.example server/.env
-```
-
-Populate `server/.env`:
-
+### 3. Server Configuration
+Create `server/.env`:
 ```env
 PORT=5000
-NODE_ENV=development
-SESSION_SECRET=change_this_to_a_random_32_byte_hex_string
-GBRAIN_DATA_DIR=./data/gbrain
-GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 GOOGLE_REDIRECT_URI=http://localhost:5000/api/auth/google/callback
 GEMINI_API_KEY=your_gemini_api_key
+SESSION_SECRET=your_random_session_secret
 ```
 
-### 4. Running the Development Server
-
-Start both backend and Vite frontend concurrently:
-
+Install and start backend:
 ```bash
+cd server
+npm install
 npm run dev
 ```
 
-- **Frontend**: `http://localhost:3000` (proxies `/api` to backend)
-- **Backend API**: `http://localhost:5000`
+### 4. Client Configuration
+Create `client/.env`:
+```env
+VITE_API_URL=http://localhost:5000
+```
 
----
-
-## Verification & Testing Suite
-
-Run the unified verification pipeline:
-
+Install and start frontend:
 ```bash
-npm run verify
+cd ../client
+npm install
+npm run dev
 ```
-
-This executes:
-1. **Server Unit & Integration Tests**: `npm test --prefix server` (17 tests covering services, routes, directory traversal, and operator precedence).
-2. **Client Production Build**: `npm run build --prefix client` (verifies bundling, module imports, and checks that no secrets are embedded in static assets).
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## Environment Variables Reference
+## Interview & Architecture Study Points
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PORT` | No | `5000` (Local) / `10000` (Render) | HTTP port for Express server. |
-| `NODE_ENV` | No | `development` | Environment mode (`development` or `production`). |
-| `SESSION_SECRET` | Recommended | Auto-generated | HMAC signing secret for session cookies. |
-| `GBRAIN_DATA_DIR` | No | `./data/gbrain` | Filesystem path for GBrain entity JSON files. |
-| `GOOGLE_CLIENT_ID` | Optional* | None | GCP OAuth 2.0 Web Client ID. |
-| `GOOGLE_CLIENT_SECRET` | Optional* | None | GCP OAuth 2.0 Web Client Secret. |
-| `GOOGLE_REDIRECT_URI` | Optional* | Auto-derived | Fully qualified OAuth callback URL. |
-| `GEMINI_API_KEY` | Optional* | None | API key from Google AI Studio. |
+### Why Function Calling over traditional RAG vector search for personal data?
+Calendar and email data are highly temporal and structured. Standard vector embeddings often fail on date-relative queries (e.g. *"meetings next Tuesday after 3 PM"*). By using function calling with deterministic parameters (`timeMin`, `timeMax`), the model directly leverages the calendar API's native query engine for 100% temporal accuracy.
 
-*\* Note: The application boots cleanly into honest degraded/demo mode when optional API keys are omitted.*
+### Token & Latency Optimization:
+To minimize context window usage and API costs, raw email bodies are truncated and sanitized of HTML boilerplate before passing to the model. Only subject lines, sender metadata, and clean text snippets are evaluated during intermediate tool-call loops.
 
 ---
 
-## Deployment (Render)
-
-This repository includes a production-ready `render.yaml` specification for single-service deployment.
-
-### Persistent Disk Configuration
-Because GBrain stores data in `server/data/`, ephemeral cloud containers lose synchronized entities and OAuth tokens upon restart. The `render.yaml` attaches a persistent disk:
-
-```yaml
-services:
-  - type: web
-    name: personal-brain
-    env: node
-    buildCommand: npm install --prefix server && npm install --prefix client && npm run build --prefix client
-    startCommand: node server/src/server.js
-    disk:
-      name: gbrain-data
-      mountPath: /opt/render/project/src/server/data
-      sizeGB: 1
-    envVars:
-      - key: PORT
-        value: 10000
-      - key: NODE_ENV
-        value: production
-      - key: SESSION_SECRET
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: GOOGLE_REDIRECT_URI
-        sync: false
-```
-
-> **Note on Free-Tier Deployment**: If deploying without Render Disks, the application remains fully functional, but data and tokens will reset on service restart or redeploy.
-
----
-
-## Known Limitations
-
-- **Single User**: Designed for one personal Google account per instance.
-- **Batch Cap**: Gmail synchronization syncs up to 50 recent messages per request to respect rate limits.
-- **Substring Filtering**: In-memory and disk queries use exact substring and date boundary filters rather than vector embeddings.
-- **Single-Turn Chat**: Designed for atomic, grounded answers over synchronized data rather than multi-turn conversational memory.
+## License
+MIT
